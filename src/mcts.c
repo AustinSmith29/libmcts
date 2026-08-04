@@ -15,9 +15,9 @@ typedef struct Node {
      * structure while maintaining a fixed Node size for compatability with
      * our pool allocator.
      */
-    Node* parent;
-    Node* first_child;
-    Node* next_sibling;
+    struct Node* parent;
+    struct Node* first_child;
+    struct Node* next_sibling;
 
     size_t visits;
 

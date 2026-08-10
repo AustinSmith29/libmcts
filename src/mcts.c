@@ -41,6 +41,18 @@ static inline void* node_move(const Node *n, size_t num_players)
     return n->data + sizeof(double) * num_players;
 }
 
+static inline bool game_init_state(const MCTSGame* game, void* state)
+{
+    assert(state != NULL);
+
+    if (game->init_state)
+    {
+        return game->init_state(state);
+    }
+
+    return true;
+}
+
 static inline void game_copy_state(
     const MCTSGame* game,
     void* dest,
@@ -148,7 +160,7 @@ MCTS* mcts_create(const MCTSGame* game)
         return NULL;
     }
     mcts->game_state = malloc(game->state_size);
-    if (!mcts->game_state)
+    if (!mcts->game_state || !game_init_state(game, mcts->game_state))
     {
         pool_destroy(mcts->node_pool);
         free(mcts);
@@ -165,7 +177,7 @@ MCTS* mcts_create(const MCTSGame* game)
     }
 
     mcts->state_buffer = malloc(game->state_size);
-    if (!mcts->state_buffer)
+    if (!mcts->state_buffer || !game_init_state(game, mcts->state_buffer))
     {
         free(mcts->move_buffer);
         free(mcts->game_state);

@@ -20,14 +20,36 @@ typedef struct MCTSGame
     ///////////
     // State
     /////////
+    /*
+     * MCTSGame owns state buffers of size `state_size`, however, all
+     * memory inside those state buffers is to be managed by the game 
+     * implementation. This can be achieved via the `init_state`, `copy_state`,
+     * and `destroy_state` methods below.
+    */
+
     size_t state_size;
 
-    /* Copies src state into dest state.
+    /*
+     * Initialize an allocated state buffer.
+     *
+     * The caller provides `state_size` bytes of uninitialized memory.
+     * On success, the state is fully initialized and may be passed to
+     * copy_state() and destroy_state().
+     *
+     * On failure, init_state() is responsible for cleaning up any resources
+     * it allocated. The caller must not pass the failed state to
+     * destroy_state().
+    */
+    bool (*init_state)(void* state);
+
+    /* Copies src state into dest state. `dest` and `src` must already be
+     * allocated state buffers.
      * If not defined defaults to memcpy.
      */
     void (*copy_state)(void* dest, const void* src);
 
-    /* Frees memory from a state.
+    /* Frees memory from a state. Does *not* free the state buffer itself,
+     * only any memory allocated *inside* the state buffer.
      * If not defined this is a no-op.
      */
     void (*destroy_state)(void* state);

@@ -107,7 +107,10 @@ typedef struct MCTS
     void* state_buffer;
 } MCTS;
 
-/** Add potential moves from parent. Return success/failure. */
+/** Add potential moves from parent.
+ * It will either add all new states, as given by `MCTSGame->get_moves` or fail
+ * and add no new child states. There is no partial expansion.
+ * Return success/failure. */
 static bool tree_expand(MCTS* mcts, Node* parent);
 
 static bool tree_is_leaf(const Node* node);
@@ -187,6 +190,14 @@ MCTS* mcts_create(const MCTSGame* game)
     }
 
     mcts->root = pool_alloc(mcts->node_pool);
+    if (!mcts->root)
+    {
+        free(mcts->move_buffer);
+        free(mcts->game_state);
+        pool_destroy(mcts->node_pool);
+        free(mcts);
+        return NULL;
+    }
     mcts->root->first_child = NULL;
     mcts->root->next_sibling = NULL;
     mcts->root->parent = NULL;
@@ -236,9 +247,19 @@ const void* mcts_search(MCTS* mcts, void* initial_state, unsigned int think_time
             continue;
         }
         
-        tree_expand(mcts, node);
+        // The only way this can fail is if pool_alloc fails, which means that
+        // we will probably not be able to allocate *any* more nodes to the
+        // tree. Given this, our tree has reached its capacity, and we shall
+        // therefore end the search. 
+        if (!tree_expand(mcts, node))
+        {
+            break;
+        }
         node = select_child(mcts, node);
-        simulate(mcts, sim_reward_vec, mcts->game->num_players);
+        if (!simulate(mcts, sim_reward_vec, mcts->game->num_players))
+        {
+            memset(sim_reward_vec, 0, sizeof(double) * mcts->game->num_players);
+        }
         backpropagate(node, sim_reward_vec, mcts->game->num_players);
     }
 
@@ -289,8 +310,7 @@ bool mcts_advance(MCTS* mcts, void* move)
     // We didn't find it in children, so lets add it.
     // Note: This puts the burden of checking the validity of the move on the
     // caller.
-    Node* new_node = (last_node) ? last_node->next_sibling : NULL;
-    new_node = pool_alloc(mcts->node_pool);
+    Node* new_node = pool_alloc(mcts->node_pool);
     if (!new_node)
     {
         return false;
@@ -309,6 +329,15 @@ bool mcts_advance(MCTS* mcts, void* move)
         move,
         mcts->game->move_size
     );
+
+    if (last_node)
+    {
+        last_node->next_sibling = new_node;
+    }
+    else
+    {
+        mcts->root_iter->first_child = new_node;
+    }
 
     mcts->root_iter = new_node;
     return true;
@@ -333,25 +362,52 @@ static bool tree_expand(MCTS* mcts, Node* parent)
 {
     assert(mcts != NULL);
     assert(parent != NULL);
+    assert(parent->first_child == NULL);
 
     size_t nmoves = mcts->game->get_moves(
         mcts->state_buffer,
         mcts->move_buffer
     );
 
-    Node* prev_child = NULL;
+    if (nmoves == 0)
+    {
+        return false;
+    }
+
+    // Allocate space for expanded children. Make sure we have enough space
+    // for a full expansion. We do not support partial expansions yet.
+    Node* children[nmoves];
     for (size_t i = 0; i < nmoves; i++)
     {
-        void* move = (char*)mcts->move_buffer + (mcts->game->move_size * i);
         Node* node = pool_alloc(mcts->node_pool);
         if (!node)
         {
+            // Free any previously allocated children
+            for (size_t j = 0; j < i; j++)
+            {
+                pool_free(mcts->node_pool, children[j]);
+            }
             return false;
         }
+        children[i] = node;
+    }
+
+    // Now initialize every child node with a move and link it into the tree
+    for (size_t i = 0; i < nmoves; i++)
+    {
+        Node* node = children[i];
+        void* move = (char*)mcts->move_buffer + (mcts->game->move_size * i);
 
         node->parent = parent;
         node->first_child = NULL;
-        node->next_sibling = NULL;
+        if (i < nmoves - 1)
+        {
+            node->next_sibling = children[i + 1];
+        }
+        else
+        {
+            node->next_sibling = NULL;
+        }
         node->visits = 0;
         memset(
             node_reward_vector(node),
@@ -363,18 +419,9 @@ static bool tree_expand(MCTS* mcts, Node* parent)
             move,
             mcts->game->move_size
         );
-
-        // Link up node into tree
-        if (!parent->first_child)
-        {
-            parent->first_child = node;
-        }
-        if (prev_child)
-        {
-            prev_child->next_sibling = node;
-        }
-        prev_child = node;
     }
+
+    parent->first_child = children[0];
 
     return true;
 }

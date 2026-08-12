@@ -80,6 +80,7 @@ MCTS* mcts_create(const MCTSGame *game);
 /* Get a move from a Monte Carlo Tree Search. Return success/fail */
 const void* mcts_search(MCTS* mcts, void* initial_state, unsigned int think_time);
 
+// MUST provide legal move. 
 bool mcts_advance(MCTS* mcts, void* move);
 
 void  mcts_destroy(MCTS* mcts);

@@ -41,13 +41,17 @@ static inline void* node_move(const Node *n, size_t num_players)
     return n->data + sizeof(double) * num_players;
 }
 
-static inline bool game_init_state(const MCTSGame* game, void* state)
+static inline bool game_init_state(
+    const MCTSGame* game,
+    void* state,
+    const void* params
+)
 {
     assert(state != NULL);
 
     if (game->init_state)
     {
-        return game->init_state(state);
+        return game->init_state(state, params);
     }
 
     return true;
@@ -119,7 +123,7 @@ static bool tree_is_leaf(const Node* node);
  * Puts the end "reward" for each player in `out_rewards`.
  * Returns success/failure.
  */
-static bool simulate(MCTS* mcts, double* out_rewards, size_t num_players);
+static bool simulate(MCTS* mcts, double* out_rewards);
 
 static void backpropagate(Node* node, const double* reward_vector, size_t num_players);
 
@@ -127,7 +131,7 @@ static Node* reset_selection(MCTS* mcts);
 
 static Node* select_child(MCTS* mcts, const Node* current);
 
-MCTS* mcts_create(const MCTSGame* game)
+MCTS* mcts_create(const MCTSGame* game, const void* params)
 {
     if (!game)
     {
@@ -163,7 +167,7 @@ MCTS* mcts_create(const MCTSGame* game)
         return NULL;
     }
     mcts->game_state = malloc(game->state_size);
-    if (!mcts->game_state || !game_init_state(game, mcts->game_state))
+    if (!mcts->game_state || !game_init_state(game, mcts->game_state, params))
     {
         pool_destroy(mcts->node_pool);
         free(mcts);
@@ -180,7 +184,9 @@ MCTS* mcts_create(const MCTSGame* game)
     }
 
     mcts->state_buffer = malloc(game->state_size);
-    if (!mcts->state_buffer || !game_init_state(game, mcts->state_buffer))
+    if (!mcts->state_buffer ||
+        !game_init_state(game, mcts->state_buffer, params)
+    )
     {
         free(mcts->move_buffer);
         free(mcts->game_state);
@@ -256,7 +262,7 @@ const void* mcts_search(MCTS* mcts, void* initial_state, unsigned int think_time
             break;
         }
         node = select_child(mcts, node);
-        if (!simulate(mcts, sim_reward_vec, mcts->game->num_players))
+        if (!simulate(mcts, sim_reward_vec))
         {
             memset(sim_reward_vec, 0, sizeof(double) * mcts->game->num_players);
         }
@@ -432,7 +438,7 @@ static bool tree_is_leaf(const Node* node)
     return node->first_child == NULL;
 }
 
-static bool simulate(MCTS* mcts, double* out_rewards, size_t num_players)
+static bool simulate(MCTS* mcts, double* out_rewards)
 {
     const size_t MAX_SIM_STEPS = 100000;
     assert(mcts != NULL);

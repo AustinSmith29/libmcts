@@ -32,7 +32,10 @@ typedef struct MCTSGame
     /*
      * Initialize an allocated state buffer.
      *
-     * The caller provides `state_size` bytes of uninitialized memory.
+     * The caller provides `state_size` bytes of uninitialized memory and an
+     * optional `params` args which can be used to pass external state needed
+     * to initialize the state.
+     * 
      * On success, the state is fully initialized and may be passed to
      * copy_state() and destroy_state().
      *
@@ -40,7 +43,7 @@ typedef struct MCTSGame
      * it allocated. The caller must not pass the failed state to
      * destroy_state().
     */
-    bool (*init_state)(void* state);
+    bool (*init_state)(void* state, const void* params);
 
     /* Copies src state into dest state. `dest` and `src` must already be
      * allocated state buffers.
@@ -75,7 +78,7 @@ typedef struct MCTSGame
 
 } MCTSGame;
 
-MCTS* mcts_create(const MCTSGame *game);
+MCTS* mcts_create(const MCTSGame *game, const void* params);
 
 /* Get a move from a Monte Carlo Tree Search. Return success/fail */
 const void* mcts_search(MCTS* mcts, void* initial_state, unsigned int think_time);
